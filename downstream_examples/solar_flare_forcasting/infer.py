@@ -158,7 +158,7 @@ def infer_single_sample(
                 timestamps_input_str = np.datetime_as_string(timestamps_input, unit='m')[0][0]
                 timestamps_targets_str = np.datetime_as_string(timestamps_targets, unit='m')[0][0]
                 
-                forecast_hat = int(F.sigmoid(model(batch)).item() > 0.5)
+                forecast_hat = int(F.sigmoid(model(batch)).item() > 0.5) # here we are using a threshold of 0.5 to convert the sigmoid output to binary prediction (0 or 1)
                 
 
                 # Display results in table format

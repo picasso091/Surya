@@ -212,3 +212,13 @@ logs/
 data/
 downstream_examples/common_data/
 downstream_examples/*/assets/
+
+# ****** my additions ******
+paper/
+downstream_examples/solar_flare_forcasting/experiments/student_data
+/downstream_examples/solar_flare_forcasting/experiments/teacher_cache/*
+/downstream_examples/solar_flare_forcasting/experiments/data/core_sdo/*
+/downstream_examples/solar_flare_forcasting/experiments/manifests/*
+/downstream_examples/solar_flare_forcasting/experiments/reports/*
+/downstream_examples/solar_flare_forcasting/experiments/runs/*
+
