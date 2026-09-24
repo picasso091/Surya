@@ -222,3 +222,5 @@ downstream_examples/solar_flare_forcasting/experiments/student_data
 /downstream_examples/solar_flare_forcasting/experiments/reports/*
 /downstream_examples/solar_flare_forcasting/experiments/runs/*
 
+x_review_paper/
+surya-bench-224.zarr/
