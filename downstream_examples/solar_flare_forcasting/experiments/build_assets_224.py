@@ -14,7 +14,7 @@ SPLITS = ["train", "validation", "leaky_validation", "test", "data"]
 
 
 def main():
-    pairs = pd.DatetimeIndex(pd.read_csv(PAIRS)["reference_time_utc"].map(pd.Timestamp)).tz_convert("UTC")
+    pairs = pd.DatetimeIndex(pd.to_datetime(pd.read_csv(PAIRS)["timestamp"])).tz_localize("UTC")
     OUTPUT.mkdir(exist_ok=True)
 
     for split in SPLITS:

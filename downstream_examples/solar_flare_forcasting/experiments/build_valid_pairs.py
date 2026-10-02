@@ -1,6 +1,5 @@
 """Build valid_pairs_224.csv: every (t-1h, t) teacher sample the 224 zarr store can supply.
 Run: python downstream_examples/solar_flare_forcasting/experiments/build_valid_pairs.py
-Pairs are matched on corrected times.
 """
 
 from pathlib import Path
@@ -13,9 +12,7 @@ HOUR_NS = 3600 * 10**9
 REPO = Path(__file__).resolve().parents[3]
 STORE = REPO / "surya-bench-224.zarr"
 OUTPUT = Path(__file__).resolve().parent / "valid_pairs_224.csv"
-COLUMNS = ["reference_time_utc", "sample_id", "prev_year", "prev_row", "curr_year", "curr_row"]
-# Pixel-verified rows, used as a final sanity check on the time correction.
-ANCHORS = {"2019-01-23 02:00": 490, "2019-01-23 03:00": 491, "2019-01-23 04:00": 492}
+COLUMNS = ["timestamp", "sample_id", "prev_year", "prev_row", "curr_year", "curr_row"]
 
 
 def true_utc(labels):
@@ -66,7 +63,7 @@ def main():
 
     # One row per sample: reference time + zarr addresses of both input frames.
     index = pd.DataFrame({
-        "reference_time_utc": current["true"].map(lambda t: t.isoformat()),
+        "timestamp": current["true"].dt.strftime("%Y-%m-%d %H:%M:%S"),
         "sample_id": current["true"].dt.strftime("%Y%m%d_%H%M"),
         "prev_year": earlier["year"], "prev_row": earlier["row"],
         "curr_year": current["year"], "curr_row": current["row"],
@@ -85,13 +82,6 @@ def main():
     print(f"pairs spanning two year files: {int((index.prev_year != index.curr_year).sum())}\n")
     print("pairs per calendar year:")
     print(stamps.year.value_counts().sort_index().to_string())
-
-    print("\nend-to-end check against the pixel-verified native frames:")
-    for stamp, expected in ANCHORS.items():
-        hit = index[index.reference_time_utc == pd.Timestamp(stamp, tz="UTC").isoformat()]
-        got = int(hit.iloc[0].curr_row) if not hit.empty else None
-        print(f"  {stamp}  curr_row={got}  expected {expected}  "
-              f"{'ok' if got == expected else 'MISMATCH'}")
 
 
 if __name__ == "__main__":

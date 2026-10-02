@@ -1,0 +1,53 @@
+data:
+  zarr_path: ../../surya-bench-224.zarr                # <year>/dataset/images: (time, 13, 224, 224)
+  pairs_path: ./experiments/valid_pairs_224.csv        # zarr rows of the (t-1h, t) frames per reference time
+  train_flare_data_path: ./assets_224/train.csv
+  valid_flare_data_path: ./assets_224/validation.csv
+  label_column: label_max
+  channels: ['aia94', 'aia131', 'aia171', 'aia193', 'aia211', 'aia304', 'aia335', 'aia1600', 'hmi_m', 'hmi_bx', 'hmi_by', 'hmi_bz', 'hmi_v']
+  scalers_path: ./assets/scalers.yaml
+  batch_size: 32
+  num_data_workers: 8
+
+model:
+  # Same architecture as the teacher; only img_size changes (224 // 16 = 14x14 tokens)
+  img_size: 224
+  patch_size: 16
+  in_channels: 13
+  time_embedding:
+    type: linear
+    n_queries: null
+    time_dim: 2
+  embed_dim: 1280
+  depth: 10
+  spectral_blocks: 2
+  num_heads: 16
+  mlp_ratio: 4.0
+  drop_rate: 0.0
+  window_size: 2
+  dp_rank: 4
+  nglo: 1
+  dropout: 0.2
+  global_average_pooling: False
+  global_max_pooling: False
+  attention_pooling: False
+  transformer_pooling: False
+  global_class_token: True
+  penultimate_linear_layer: True
+  use_lora: true # true: freeze big layers(attn.qkv,attn.proj, mlp.fc1,mlp.fc2), only train LoRA weight layers + train_fully layers; false: train big layers + lora weights+ train_fully layers
+  lora_config:
+    r: 8
+    lora_alpha: 8
+    target_modules: ['qkv', 'attn.proj', 'fc1', 'fc2']
+    lora_dropout: 0.1
+    bias: 'none'
+  train_fully: ['complex_weight', 'patch_embed', 'cls_token', '.linear.', 'unembed', 'norm', 'dual_ln']
+
+teacher_path: ./assets/solar_flare_weights.pth
+teacher_lora: {r: 8, lora_alpha: 8, target_modules: ['fc1', 'fc2']}   # how the teacher was trained
+learning_rate: 0.0001
+max_epochs: 20
+path_experiment: checkpoints_224
+wandb:
+  project: solar-flare-224
+  mode: online
