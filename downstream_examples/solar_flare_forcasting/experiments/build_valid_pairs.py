@@ -10,15 +10,9 @@ import zarr
 
 HOUR_NS = 3600 * 10**9
 REPO = Path(__file__).resolve().parents[3]
-STORE = REPO / "surya-bench-224.zarr"
+STORE = REPO / "surya-bench-224-interarea.zarr"
 OUTPUT = Path(__file__).resolve().parent / "valid_pairs_224.csv"
 COLUMNS = ["timestamp", "sample_id", "prev_year", "prev_row", "curr_year", "curr_row"]
-
-
-def true_utc(labels):
-    """Stored label -> true UTC (reinterpret the label as Pacific local time)."""
-    return (pd.DatetimeIndex(labels).tz_convert("America/Los_Angeles")
-              .tz_localize(None).tz_localize("UTC"))
 
 
 def main():
@@ -26,14 +20,15 @@ def main():
     if not years:
         raise SystemExit(f"No year groups found under {STORE}")
 
-    # Load time arrays, drop holes (timestamp 0), correct labels to true UTC.
+    # Load time arrays and drop holes (timestamp 0). Labels are already true UTC
+    # (checks/check_time_offset.py: offset +0 h), so no time-zone correction.
     frames = []
     for year in years:
         stored = np.asarray(zarr.open(str(STORE / year / "dataset"), mode="r")["time"][:])
         written = np.flatnonzero(stored != 0)
         frames.append(pd.DataFrame({
             "year": year, "row": written,
-            "true": true_utc(pd.to_datetime(stored[written], unit="ns", utc=True)),
+            "true": pd.to_datetime(stored[written], unit="ns", utc=True),
             "declared": len(stored), "holes": len(stored) - len(written),
         }))
     catalogue = pd.concat(frames, ignore_index=True)
@@ -47,11 +42,11 @@ def main():
     print(f"{'TOTAL':<6} declared={inventory.declared_rows.sum()} "
           f"holes={inventory.holes.sum()} real={inventory.real_frames.sum()}\n")
 
-    # Drop DST collisions, keeping the later (correct) row.
+    # Drop duplicate timestamps (none expected with UTC labels), keeping the later row.
     catalogue = catalogue.sort_values(["true", "year", "row"], kind="stable")
     collisions = int(catalogue["true"].duplicated().sum())
     catalogue = catalogue.drop_duplicates("true", keep="last").reset_index(drop=True)
-    print(f"frames dropped as unnameable daylight saving collisions: {collisions}")
+    print(f"frames dropped as duplicate timestamps: {collisions}")
     print(f"distinct true timestamps: {len(catalogue)}\n")
 
     # Pair each frame with the frame exactly 1 h earlier; unmatched frames are dropped.
