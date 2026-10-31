@@ -1,23 +1,21 @@
 data:
-  zarr_path: ../../surya-bench-224.zarr                # <year>/dataset/images: (time, 13, 224, 224)
-  pairs_path: ./experiments/valid_pairs_224.csv        # zarr rows of the (t-1h, t) frames per reference time
+  zarr_path: ../../surya-bench-224-interarea.zarr   # <year>/dataset/images: (time, 13, 224, 224)
+  pairs_path: ./experiments/valid_pairs_224.csv     # zarr rows of the (t-1h, t) frames
   train_flare_data_path: ./assets_224/train.csv
   valid_flare_data_path: ./assets_224/validation.csv
+  test_flare_data_path: ./assets_224/test.csv
   label_column: label_max
   channels: ['aia94', 'aia131', 'aia171', 'aia193', 'aia211', 'aia304', 'aia335', 'aia1600', 'hmi_m', 'hmi_bx', 'hmi_by', 'hmi_bz', 'hmi_v']
   scalers_path: ./assets/scalers.yaml
-  batch_size: 32
-  num_data_workers: 8
+  batch_size: 128
+  num_data_workers: 16
 
 model:
   # Same architecture as the teacher; only img_size changes (224 // 16 = 14x14 tokens)
   img_size: 224
   patch_size: 16
   in_channels: 13
-  time_embedding:
-    type: linear
-    n_queries: null
-    time_dim: 2
+  time_embedding: {type: linear, n_queries: null, time_dim: 2}
   embed_dim: 1280
   depth: 10
   spectral_blocks: 2
@@ -34,20 +32,53 @@ model:
   transformer_pooling: False
   global_class_token: True
   penultimate_linear_layer: True
-  use_lora: true # true: freeze big layers(attn.qkv,attn.proj, mlp.fc1,mlp.fc2), only train LoRA weight layers + train_fully layers; false: train big layers + lora weights+ train_fully layers
-  lora_config:
-    r: 8
-    lora_alpha: 8
-    target_modules: ['qkv', 'attn.proj', 'fc1', 'fc2']
-    lora_dropout: 0.1
-    bias: 'none'
-  train_fully: ['complex_weight', 'patch_embed', 'cls_token', '.linear.', 'unembed', 'norm', 'dual_ln']
 
 teacher_path: ./assets/solar_flare_weights.pth
-teacher_lora: {r: 8, lora_alpha: 8, target_modules: ['fc1', 'fc2']}   # how the teacher was trained
-learning_rate: 0.0001
-max_epochs: 20
-path_experiment: checkpoints_224
-wandb:
-  project: solar-flare-224
-  mode: online
+teacher_lora: {r: 8, lora_alpha: 8, target_modules: ['fc1', 'fc2']}   # the LoRA the 4096 teacher was trained with
+
+# Finetuning at 224: new LoRA, and the training settings
+lora: {r: 8, lora_alpha: 8, target_modules: ['qkv', 'attn.proj', 'fc1', 'fc2'], lora_dropout: 0.1, bias: 'none'}
+train:
+  # epochs, learning_rate, weight_decay, decay: best sweep_css trial (results_224/sweep_css/cosine_lr9.1e-05_wd3.4e-03_1024-033716)
+  epochs: 3
+  learning_rate: 0.00009063009807898777 # 9.1e-05
+  weight_decay: 0.003444191764403912 # 3.4e-03
+  decay: cosine               # none, cosine or warmup_cosine
+  warmup: 0.05                # warmup_cosine only: share of steps spent warming up
+  validate_every: 135
+  early_stopping_patience: 5  # checks without a better validation CSS; null trains to the end
+  cutoff: 0.5                 # a flare is forecast where probability >= cutoff
+  weighted_bce: true          # true: each flare weighs non-flares/flares; false: plain BCE
+
+output_folder: experiments/results_224
+run_name: lora_css
+wandb: {project: solar-flare-224, mode: online}
+
+# Student, logit KD
+student:
+  model: mobilenet            # mobilenet or cnn
+  teacher_cache: experiments/results_224/lora_css/teacher_cache_train.csv
+  output_folder: experiments/results_224/student_cnn_ep1_beta0.5
+  epochs: 1
+  learning_rate: 0.001        # higher than the teacher's: the student starts from scratch
+  weight_decay: 0.0001
+  decay: cosine
+  validate_every: 100
+  early_stopping_patience: 5
+  alpha: 1.0                  # weight of the weighted BCE on labels
+  beta: 0.5                   # weight of the MSE to the teacher's logits
+
+# Student, feature KD
+# student_feature_kd:
+#   model: mobilenet            # mobilenet or cnn
+#   teacher_cache: experiments/results_224/lora_weighted_hss/teacher_cache_train.csv
+#   teacher_features: experiments/results_224/lora_weighted_hss/teacher_features_train.npy
+#   output_folder: experiments/results_224/mbn_feat_s0
+#   epochs: 1
+#   learning_rate: 0.001
+#   weight_decay: 0.0001
+#   decay: cosine
+#   validate_every: 100
+#   early_stopping_patience: 5
+#   alpha: 1.0                  # weight of the weighted BCE on labels
+#   beta: 1.0                   # weight of the cosine loss to the teacher's CLS feature
