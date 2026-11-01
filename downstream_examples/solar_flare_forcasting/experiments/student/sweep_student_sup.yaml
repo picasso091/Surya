@@ -1,0 +1,29 @@
+# Bayesian search for the supervised student (beta 0: no teacher).
+# Start (from downstream_examples/solar_flare_forcasting):
+#   /home/rakshyapanta/.conda/envs/suryaenv/bin/wandb sweep experiments/student/sweep_student_sup.yaml
+#   CUDA_VISIBLE_DEVICES=1 /home/rakshyapanta/.conda/envs/suryaenv/bin/wandb agent --count 20 <sweep id printed above>
+
+program: experiments/student/train_student224_logit_kd.py
+project: solar-flare-224
+method: bayes
+metric: {name: valid/best_css, goal: maximize}
+run_cap: 20
+parameters:
+  learning_rate: {distribution: log_uniform_values, min: 1.0e-4, max: 1.0e-2}
+  weight_decay: {distribution: log_uniform_values, min: 1.0e-4, max: 1.0e-1}
+  decay: {values: [cosine, warmup_cosine]}
+command:
+  - /home/rakshyapanta/.conda/envs/suryaenv/bin/python
+  - ${program}
+  - --sweep
+  - --output_folder
+  - experiments/results_224/sweep_student_sup
+  - --beta
+  - "0"
+  - --epochs
+  - "3"
+  - --patience
+  - none
+  - --select
+  - css
+  - ${args}
