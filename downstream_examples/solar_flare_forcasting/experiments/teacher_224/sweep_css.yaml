@@ -1,14 +1,14 @@
 # Bayesian search for the 224 teacher: learning rate, weight decay and learning-rate schedule.
-# Each trial saves into experiments/results_224/sweep_css/<decay>_lr<..>_wd<..>_<start time>/.
+# Each trial saves into experiments/results_224/sweep_correct_css/<decay>_lr<..>_wd<..>_<start time>/.
 
 # Start (from downstream_examples/solar_flare_forcasting):
 #   /home/rakshyapanta/.conda/envs/suryaenv/bin/wandb sweep experiments/teacher_224/sweep_css.yaml
 #       -> prints the sweep id, e.g. <entity>/solar-flare-224/abc123
-        #rakshya-panta-texas-christian-university/solar-flare-224/bu84swik
 #   CUDA_VISIBLE_DEVICES=1 /home/rakshyapanta/.conda/envs/suryaenv/bin/wandb agent --count 20 <entity>/solar-flare-224/abc123
 
 program: experiments/teacher_224/teacher224_lora.py
 project: solar-flare-224
+name: correct_css
 method: bayes
 metric: {name: valid/best_css, goal: maximize}
 run_cap: 20
@@ -21,7 +21,9 @@ command:
   - ${program}
   - --sweep
   - --run_name
-  - sweep_css
+  - sweep_correct_css
+  - --group
+  - correct_css
   - --epochs
   - "3"
   - --patience

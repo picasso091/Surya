@@ -8,7 +8,7 @@ data:
   channels: ['aia94', 'aia131', 'aia171', 'aia193', 'aia211', 'aia304', 'aia335', 'aia1600', 'hmi_m', 'hmi_bx', 'hmi_by', 'hmi_bz', 'hmi_v']
   scalers_path: ./assets/scalers.yaml
   batch_size: 128
-  num_data_workers: 16
+  num_data_workers: 8 # number of processes to use for data loading, 0 means the main process will do the data loading
 
 model:
   # Same architecture as the teacher; only img_size changes (224 // 16 = 14x14 tokens)

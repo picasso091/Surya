@@ -215,6 +215,7 @@ def main():
     parser.add_argument("--seed", type=int, default=0, help="model and shuffling randomness")
     parser.add_argument("--sweep", action="store_true",
                         help="a search trial: its own folder, <run_name>/<decay>_lr<..>_wd<..>_<start time>")
+    parser.add_argument("--group", help="wandb group, e.g. correct_css")
     args = parser.parse_args()
     for k in ("epochs", "learning_rate", "weight_decay", "decay", "seed"):   # into tr, so wandb records them
         tr[k] = getattr(args, k)
@@ -253,7 +254,7 @@ def main():
     print(f"flare sample weight in the loss: {pos_weight.item():.2f}")
 
     run = wandb.init(project=cfg["wandb"]["project"], name=cfg["run_name"].replace("/", "-"), config=cfg,
-                     mode=cfg["wandb"]["mode"]) if cfg.get("wandb") else None
+                     group=args.group, mode=cfg["wandb"]["mode"]) if cfg.get("wandb") else None
 
     # 4. Each check saves best.pth on a new best validation CSS and returns True to stop early.
     #    Step 0 (the teacher before finetuning) is logged but never counted as best.
