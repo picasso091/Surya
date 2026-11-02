@@ -83,11 +83,11 @@ def parse_args():
 
 
 def main():
-    # 0. Reproducible runs (slower)
+    # 0. Reproducible runs
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.use_deterministic_algorithms(True, warn_only=True)
-    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")  # must be set before the GPU is first used
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
     cfg = yaml.safe_load(open("config_224.yaml"))
     d, s = cfg["data"], cfg["student"]

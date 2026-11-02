@@ -18,7 +18,7 @@ import xarray as xr
 import zarr
 
 REPO = Path(__file__).resolve().parents[4]
-ZARR_224 = REPO / "surya-bench-224.zarr"
+ZARR_224 = REPO / "surya-bench-224-interarea.zarr"
 NATIVE_4K = REPO / "downstream_examples/solar_flare_forcasting/assets/original_4k_data_samples"
 CHANNEL = "aia171"          # any channel works
 OFFSETS = range(-12, 13)
@@ -51,7 +51,8 @@ for path in sorted(NATIVE_4K.glob("*.nc")):
     # Read every label in that year's 224 zarr (row number = position in this list)
     group = zarr.open(str(ZARR_224 / str(true_time.year) / "dataset"), mode="r")
     labels = pd.to_datetime(np.asarray(group["time"][:]), unit="ns")
-    c = list(group["images"].attrs["channel_names"]).index(CHANNEL)
+    attrs = group["images"].attrs  # old store: "channel_names", interarea store: "channels"
+    c = list(attrs.get("channels") or attrs["channel_names"]).index(CHANNEL)
 
     # Load the native 4K picture and shrink it to 224 so the two can be compared
     with xr.open_dataset(path, engine="h5netcdf") as ds:

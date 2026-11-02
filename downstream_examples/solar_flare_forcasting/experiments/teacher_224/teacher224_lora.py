@@ -109,15 +109,20 @@ def predict(model, loader):
     return torch.sigmoid(predict_logits(model, loader)).numpy()
 
 
+def css_score(tss, hss):
+    """CSS = sqrt(TSS * HSS), and 0 where TSS < 0 or HSS < 0. Works on numbers or arrays."""
+    return np.where((tss < 0) | (hss < 0), 0.0, np.sqrt(np.maximum(tss * hss, 0.0)))
+
+
 def skill(labels, flare):
     """TSS, HSS, CSS and F1; flare: True where a flare is forecast."""
     tp = np.sum(flare & (labels == 1))
     fn = np.sum(~flare & (labels == 1))
     fp = np.sum(flare & (labels == 0))
     tn = np.sum(~flare & (labels == 0))
-    return {"tss": float(tp / (tp + fn) - fp / (fp + tn)),
-            "hss": float(2 * (tp * tn - fn * fp) / ((tp + fn) * (fn + tn) + (tp + fp) * (fp + tn))),
-            "css": float(tp / (tp + fp) - fn / (fn + tn)),
+    tss = tp / (tp + fn) - fp / (fp + tn)
+    hss = 2 * (tp * tn - fn * fp) / ((tp + fn) * (fn + tn) + (tp + fp) * (fp + tn))
+    return {"tss": float(tss), "hss": float(hss), "css": float(css_score(tss, hss)),
             "f1": float(2 * tp / (2 * tp + fp + fn))}
 
 
@@ -128,15 +133,10 @@ def roc_auc(labels, probs):
 
 
 def scores_at(labels, probs, cutoff):
-    """Scores with a flare forecast where probs >= cutoff; forecast: how many flare forecasts.
-    A CSS term that is 0/0 (no "yes" or no "no" forecasts) counts as 0."""
+    """Scores with a flare forecast where probs >= cutoff; forecast: how many flare forecasts."""
     flare = probs >= cutoff
-    tp, fp = np.sum(flare & (labels == 1)), np.sum(flare & (labels == 0))
-    fn, tn = np.sum(~flare & (labels == 1)), np.sum(~flare & (labels == 0))
-    with np.errstate(divide="ignore", invalid="ignore"):   # skill's CSS may be 0/0; recomputed below
-        s = skill(labels, flare)
-    s["css"] = float((tp / (tp + fp) if tp + fp else 0.0) - (fn / (fn + tn) if fn + tn else 0.0))
-    return {"roc_auc": roc_auc(labels, probs), "threshold": float(cutoff), "forecast": int(flare.sum()), **s} #here2
+    return {"roc_auc": roc_auc(labels, probs), "threshold": float(cutoff), "forecast": int(flare.sum()),
+            **skill(labels, flare)} #here2
 
 
 # def scores(labels, probs, by="css"):
@@ -149,8 +149,7 @@ def scores_at(labels, probs, cutoff):
 #     fn, tn = tp[-1] - tp, fp[-1] - fp
 #     hss = 2 * (tp * tn - fn * fp) / ((tp + fn) * (fn + tn) + (tp + fp) * (fp + tn))
 #     tss = tpr - fpr
-#     # tp + fp >= 1 at every cut-off; fn + tn is 0 at the last one, where that term counts as 0 (as in scores_at)
-#     css = tp / (tp + fp) - np.divide(fn, fn + tn, out=np.zeros_like(fn), where=fn + tn > 0)
+#     css = css_score(tss, hss)
 #     threshold = p[np.argmax({"tss": tss, "hss": hss, "css": css}[by])]
 #     return {"roc_auc": float(np.sum(np.diff(np.r_[0, fpr]) * (np.r_[0, tpr][1:] + np.r_[0, tpr][:-1]) / 2)),
 #             "threshold": float(threshold), **skill(labels, probs >= threshold)}

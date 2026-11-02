@@ -65,7 +65,7 @@ student:
   decay: cosine
   validate_every: 100
   early_stopping_patience: 5
-  select: css                 # validation score that picks best.pth: css (at train.cutoff) or roc_auc
+  select: css                 # validation score that picks best.pth: css (at train.cutoff)
   alpha: 1.0                  # weight of the weighted BCE on labels
   beta: 0.5                   # weight of the MSE to the teacher's logits
 
