@@ -1,6 +1,4 @@
-"""Test-set predictions of the finetuned teacher at 224 (results_224/<run_name>/best.pth).
-
-The flare yes/no uses the cut-off chosen on validation (results.json).
+"""Test-set predictions of the finetuned teacher at 224.
 
 Run from downstream_examples/solar_flare_forcasting, after teacher224_lora.py:
     CUDA_VISIBLE_DEVICES=1 conda run -n suryaenv --no-capture-output python experiments/teacher_224/teacher224_lora_test.py \

@@ -110,8 +110,10 @@ def predict(model, loader):
 
 
 def css_score(tss, hss):
-    """CSS = sqrt(TSS * HSS), and 0 where TSS < 0 or HSS < 0. Works on numbers or arrays."""
-    return np.where((tss < 0) | (hss < 0), 0.0, np.sqrt(np.maximum(tss * hss, 0.0)))
+    """CSS = sqrt(TSS * HSS), and 0 if TSS < 0 or HSS < 0."""
+    if tss < 0 or hss < 0:
+        return 0.0
+    return float(np.sqrt(tss * hss))
 
 
 def skill(labels, flare):
@@ -212,16 +214,19 @@ def main():
     parser.add_argument("--weight_decay", type=float, default=tr["weight_decay"])
     parser.add_argument("--decay", choices=["none", "cosine", "warmup_cosine"], default=tr["decay"],
                         help="learning-rate schedule (lr_schedule)")
+    parser.add_argument("--pos_weight", default="full" if tr["weighted_bce"] else "plain",
+                        help="flare weight in the BCE: plain (1), half (non-flares/flares / 2), "
+                             "full (non-flares/flares, balanced) or a number")
     parser.add_argument("--seed", type=int, default=0, help="model and shuffling randomness")
     parser.add_argument("--sweep", action="store_true",
-                        help="a search trial: its own folder, <run_name>/<decay>_lr<..>_wd<..>_<start time>")
+                        help="a search trial: its own folder, <run_name>/<decay>_lr<..>_wd<..>_pw<..>_<start time>")
     parser.add_argument("--group", help="wandb group, e.g. correct_css")
     args = parser.parse_args()
-    for k in ("epochs", "learning_rate", "weight_decay", "decay", "seed"):   # into tr, so wandb records them
+    for k in ("epochs", "learning_rate", "weight_decay", "decay", "pos_weight", "seed"):   # into tr, so wandb records them
         tr[k] = getattr(args, k)
     tr["early_stopping_patience"] = args.patience
     cfg["run_name"] = (f"{args.run_name}/{args.decay}_lr{args.learning_rate:.1e}_wd{args.weight_decay:.1e}_"
-                       f"{time.strftime('%m%d-%H%M%S')}" if args.sweep else args.run_name)
+                       f"pw{args.pos_weight}_{time.strftime('%m%d-%H%M%S')}" if args.sweep else args.run_name)
     out = Path(cfg["output_folder"]) / cfg["run_name"]
     out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
@@ -248,10 +253,13 @@ def main():
     
     
     
-    # Weighted BCE: each flare weighs non-flares/flares, balancing the classes
+    # Weighted BCE: each flare weighs pos_weight; full = non-flares/flares balances the classes
     flare_rate = train.labels.mean()
-    pos_weight = torch.tensor(float((1 - flare_rate) / flare_rate) if tr["weighted_bce"] else 1.0, device="cuda")
-    print(f"flare sample weight in the loss: {pos_weight.item():.2f}")
+    balanced = float((1 - flare_rate) / flare_rate)
+    named = {"plain": 1.0, "half": balanced / 2, "full": balanced}
+    pos_weight = torch.tensor(named.get(tr["pos_weight"]) or float(tr["pos_weight"]), device="cuda")
+    tr["pos_weight_value"] = pos_weight.item()   # the actual weight, into the wandb config
+    print(f"flare sample weight in the loss: {pos_weight.item():.2f} ({tr['pos_weight']}; balanced {balanced:.2f})")
 
     run = wandb.init(project=cfg["wandb"]["project"], name=cfg["run_name"].replace("/", "-"), config=cfg,
                      group=args.group, mode=cfg["wandb"]["mode"]) if cfg.get("wandb") else None

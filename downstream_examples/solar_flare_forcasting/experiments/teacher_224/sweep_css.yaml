@@ -1,5 +1,5 @@
-# Bayesian search for the 224 teacher: learning rate, weight decay and learning-rate schedule.
-# Each trial saves into experiments/results_224/sweep_correct_css/<decay>_lr<..>_wd<..>_<start time>/.
+# Bayesian search for the 224 teacher: learning rate, weight decay, learning-rate schedule and flare weight in the BCE.
+# Each trial saves into experiments/results_224/sweep_correct_css/<decay>_lr<..>_wd<..>_pw<..>_<start time>/.
 
 # Start (from downstream_examples/solar_flare_forcasting):
 #   /home/rakshyapanta/.conda/envs/suryaenv/bin/wandb sweep experiments/teacher_224/sweep_css.yaml
@@ -16,6 +16,7 @@ parameters:
   learning_rate: {distribution: log_uniform_values, min: 1.0e-6, max: 3.0e-4}
   weight_decay: {distribution: log_uniform_values, min: 1.0e-4, max: 1.0e-1}
   decay: {values: [none, cosine, warmup_cosine]}
+  pos_weight: {values: [plain, half, full]}
 command:
   - /home/rakshyapanta/.conda/envs/suryaenv/bin/python
   - ${program}
@@ -25,7 +26,7 @@ command:
   - --group
   - correct_css
   - --epochs
-  - "3"
+  - "50"
   - --patience
   - none
   - ${args}

@@ -1,9 +1,10 @@
-"""Teacher cache: the finetuned teacher at 224 (results_224/<run_name>/best.pth) on every train.csv sample.
+"""Teacher cache: the finetuned teacher at 224 on every train.csv sample.
 Saves the logits (teacher_cache_train.csv) and the 1280-number CLS feature that enters the
 classification layer (teacher_features_train.npy; row i belongs to row i of the CSV).
+
 Run from downstream_examples/solar_flare_forcasting (run_name from config_224.yaml, or --run_name to pick another run):
-    cd /home/rakshyapanta/Surya/downstream_examples/solar_flare_forcasting && CUDA_VISIBLE_DEVICES=0 conda run -n suryaenv --no-capture-output python experiments/teacher_224/teacher224_lora_cache.py \
-    --run_name sweep_css/cosine_lr9.1e-05_wd3.4e-03_1024-033716
+    CUDA_VISIBLE_DEVICES=0 conda run -n suryaenv --no-capture-output python experiments/teacher_224/teacher224_lora_cache.py \
+    --run_name sweep_css/lora_css
 
 """
 
