@@ -2,10 +2,9 @@
 Saves the logits (teacher_cache_train.csv) and the 1280-number CLS feature that enters the
 classification layer (teacher_features_train.npy; row i belongs to row i of the CSV).
 
-Run from downstream_examples/solar_flare_forcasting (run_name from config_224.yaml, or --run_name to pick another run):
-    CUDA_VISIBLE_DEVICES=0 conda run -n suryaenv --no-capture-output python experiments/teacher_224/teacher224_lora_cache.py \
-    --run_name sweep_css/lora_css
-
+The teacher is the top trial in rank_trials.py's table, so run rank_trials.py first.
+Run from downstream_examples/solar_flare_forcasting:
+    CUDA_VISIBLE_DEVICES=0 conda run -n suryaenv --no-capture-output python experiments/teacher_224/teacher224_lora_cache.py
 """
 
 import argparse
@@ -13,6 +12,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -23,9 +23,19 @@ from teacher224_lora import Flare224Dataset, add_lora, load_teacher_224
 def main():
     cfg = yaml.safe_load(open("config_224.yaml"))
     p = argparse.ArgumentParser()
-    p.add_argument("--run_name", default=cfg["run_name"], help="results_224 subfolder with best.pth and results.json")
+    p.add_argument("--sweep_dir", default="experiments/results_224/sweep_correct_css",
+                   help="rank_trials.py --sweep_dir")
+    p.add_argument("--selection", default="experiments/results_224/sweep_correct_css_selection.csv",
+                   help="rank_trials.py --out")
+    args = p.parse_args()
     d = cfg["data"]
-    out = Path(cfg["output_folder"]) / p.parse_args().run_name
+
+    # 0. Teacher: top row of the selection table
+    winner = pd.read_csv(args.selection).iloc[0]
+    out = Path(args.sweep_dir) / winner["trial"]
+    if not (out / "best.pth").exists():
+        raise FileNotFoundError(f"{out}/best.pth not found: is {args.selection} from {args.sweep_dir}?")
+    print(f"teacher: {out}  (rank_total {winner['rank_total']}, smoothed CSS {winner['smoothed_css']:.4f})")
 
     # 1. Training data, in file order
     train = Flare224Dataset(d, d["train_flare_data_path"])
@@ -57,6 +67,7 @@ def main():
     features = torch.cat(features).numpy()
     np.save(out / "teacher_features_train.npy", features)
     print(f"saved {out}/teacher_features_train.npy {features.shape}")
+    print(f"next: set student.teacher_folder in config_224.yaml to {out}")
 
 
 if __name__ == "__main__":

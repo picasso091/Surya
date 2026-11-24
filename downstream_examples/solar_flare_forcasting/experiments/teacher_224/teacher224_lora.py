@@ -221,12 +221,21 @@ def main():
     parser.add_argument("--sweep", action="store_true",
                         help="a search trial: its own folder, <run_name>/<decay>_lr<..>_wd<..>_pw<..>_<start time>")
     parser.add_argument("--group", help="wandb group, e.g. correct_css")
+    parser.add_argument("--resume", metavar="FOLDER",
+                        help="continue the run in FOLDER from its newest epoch_<n>.pth, with the run's own settings")
     args = parser.parse_args()
     for k in ("epochs", "learning_rate", "weight_decay", "decay", "pos_weight", "seed"):   # into tr, so wandb records them
         tr[k] = getattr(args, k)
     tr["early_stopping_patience"] = args.patience
     cfg["run_name"] = (f"{args.run_name}/{args.decay}_lr{args.learning_rate:.1e}_wd{args.weight_decay:.1e}_"
                        f"pw{args.pos_weight}_{time.strftime('%m%d-%H%M%S')}" if args.sweep else args.run_name)
+    ckpt = None
+    if args.resume:   # the stopped run's own settings, folder and wandb run
+        last = max(Path(args.resume).glob("epoch_*.pth"))
+        print(f"resuming from {last}")
+        ckpt = torch.load(last, map_location="cpu", weights_only=False)
+        cfg, args.group = ckpt["cfg"], ckpt["group"]
+        d, tr = cfg["data"], cfg["train"]
     out = Path(cfg["output_folder"]) / cfg["run_name"]
     out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
@@ -262,7 +271,8 @@ def main():
     print(f"flare sample weight in the loss: {pos_weight.item():.2f} ({tr['pos_weight']}; balanced {balanced:.2f})")
 
     run = wandb.init(project=cfg["wandb"]["project"], name=cfg["run_name"].replace("/", "-"), config=cfg,
-                     group=args.group, mode=cfg["wandb"]["mode"]) if cfg.get("wandb") else None
+                     group=args.group, mode=cfg["wandb"]["mode"],
+                     id=ckpt["wandb_id"] if ckpt else None, resume="allow" if ckpt else None) if cfg.get("wandb") else None
 
     # 4. Each check saves best.pth on a new best validation CSS and returns True to stop early.
     #    Step 0 (the teacher before finetuning) is logged but never counted as best.
@@ -292,19 +302,28 @@ def main():
             torch.save(model.state_dict(), out / "best.pth")
         return step > 0 and stop_early(history[1:], patience, "css")
 
-    # 5. Train, checking every validate_every steps and at the last step
-    check(0)
-    step, stopped = 0, False
-    for epoch in range(tr["epochs"]):
+    # 5. Train, checking every validate_every steps and at the last step; a checkpoint after each epoch
+    step, stopped, start_epoch = 0, False, 0
+    if ckpt:   # continue after the stopped run's last finished epoch
+        model.load_state_dict(ckpt["model"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+        scheduler.load_state_dict(ckpt["scheduler"])
+        history, losses, step, start_epoch = ckpt["history"], ckpt["losses"], ckpt["step"], ckpt["epoch"] + 1
+        torch.set_rng_state(ckpt["rng_cpu"])          # same shuffling and dropout as a run that never stopped
+        torch.cuda.set_rng_state(ckpt["rng_cuda"])
+    else:
+        check(0)
+    for epoch in range(start_epoch, tr["epochs"]):
         if stopped:
             break
         for batch in train_loader:
             model.train()
             batch = {k: x.cuda() for k, x in batch.items()}
             loss = F.binary_cross_entropy_with_logits(model(batch), batch["label"], pos_weight=pos_weight)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            #one weight update per batch
+            optimizer.zero_grad()  # clear old gradients
+            loss.backward() # gradients from this batch of 128
+            optimizer.step() # update weights with them
             scheduler.step()
             losses.append(loss.item())
             step += 1
@@ -314,6 +333,15 @@ def main():
                 print(f"early stop at step {step}: no better validation CSS in the last {patience} checks")
                 stopped = True
                 break
+        if not stopped:   # keep this epoch's checkpoint and the one before (a fallback); delete older ones
+            path = out / f"epoch_{epoch:02d}.pth"
+            torch.save({"epoch": epoch, "step": step, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                        "scheduler": scheduler.state_dict(), "history": history, "losses": losses[-tr["validate_every"]:],
+                        "cfg": cfg, "group": args.group, "wandb_id": run.id if run else None,
+                        "rng_cpu": torch.get_rng_state(), "rng_cuda": torch.cuda.get_rng_state()}, path.with_suffix(".tmp"))
+            os.replace(path.with_suffix(".tmp"), path)   # a kill mid-save can't leave a half-written epoch file
+            for old in sorted(out.glob("epoch_*.pth"))[:-2]:
+                old.unlink()
 
     # 6. Score the best checkpoint on validation
     model.load_state_dict(torch.load(out / "best.pth", map_location="cpu"))
